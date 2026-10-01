@@ -1,0 +1,375 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+#include <ctime>
+#include <iomanip>
+#include <limits>
+#include <algorithm>
+
+using namespace std;
+
+class RecoveryRecord {
+public:
+    int id;
+    string fileName;
+    string filePath;
+    string deletedDate;
+    string status;
+
+    RecoveryRecord() {}
+
+    RecoveryRecord(int id, string fileName, string filePath,
+                   string deletedDate, string status) {
+        this->id = id;
+        this->fileName = fileName;
+        this->filePath = filePath;
+        this->deletedDate = deletedDate;
+        this->status = status;
+    }
+};
+
+class RecoveryHistoryManager {
+private:
+    vector<RecoveryRecord> records;
+    const string fileName = "recovery_history.txt";
+
+    string getCurrentDateTime() {
+        time_t now = time(0);
+        tm *localTime = localtime(&now);
+
+        char buffer[80];
+        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localTime);
+
+        return string(buffer);
+    }
+
+    int getNextId() {
+        int maxId = 0;
+
+        for (const auto &record : records) {
+            if (record.id > maxId) {
+                maxId = record.id;
+            }
+        }
+
+        return maxId + 1;
+    }
+
+    string toLowerCase(string text) {
+        transform(text.begin(), text.end(), text.begin(),
+                  [](unsigned char c) { return tolower(c); });
+        return text;
+    }
+
+public:
+    void loadHistory() {
+        ifstream inputFile(fileName);
+
+        if (!inputFile.is_open()) {
+            return;
+        }
+
+        records.clear();
+
+        string line;
+        while (getline(inputFile, line)) {
+            RecoveryRecord record;
+
+            size_t pos1 = line.find('|');
+            size_t pos2 = line.find('|', pos1 + 1);
+            size_t pos3 = line.find('|', pos2 + 1);
+            size_t pos4 = line.find('|', pos3 + 1);
+
+            if (pos1 != string::npos &&
+                pos2 != string::npos &&
+                pos3 != string::npos &&
+                pos4 != string::npos) {
+
+                record.id = stoi(line.substr(0, pos1));
+                record.fileName = line.substr(pos1 + 1, pos2 - pos1 - 1);
+                record.filePath = line.substr(pos2 + 1, pos3 - pos2 - 1);
+                record.deletedDate = line.substr(pos3 + 1, pos4 - pos3 - 1);
+                record.status = line.substr(pos4 + 1);
+
+                records.push_back(record);
+            }
+        }
+
+        inputFile.close();
+    }
+
+    void saveHistory() {
+        ofstream outputFile(fileName);
+
+        if (!outputFile.is_open()) {
+            cout << "\nError: Cannot save recovery history.\n";
+            return;
+        }
+
+        for (const auto &record : records) {
+            outputFile << record.id << "|"
+                       << record.fileName << "|"
+                       << record.filePath << "|"
+                       << record.deletedDate << "|"
+                       << record.status << "\n";
+        }
+
+        outputFile.close();
+    }
+
+    void addDeletedFile() {
+        string name, path;
+
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+        cout << "\nEnter file name: ";
+        getline(cin, name);
+
+        cout << "Enter original file path: ";
+        getline(cin, path);
+
+        if (name.empty() || path.empty()) {
+            cout << "\nFile name and path cannot be empty.\n";
+            return;
+        }
+
+        RecoveryRecord newRecord(
+            getNextId(),
+            name,
+            path,
+            getCurrentDateTime(),
+            "Available for Recovery"
+        );
+
+        records.push_back(newRecord);
+        saveHistory();
+
+        cout << "\nFile added to recovery history successfully.\n";
+        cout << "Recovery ID: " << newRecord.id << "\n";
+    }
+
+    void viewHistory() {
+        if (records.empty()) {
+            cout << "\nNo recovery history found.\n";
+            return;
+        }
+
+        cout << "\n================ RECOVERY HISTORY ================\n";
+
+        cout << left
+             << setw(6) << "ID"
+             << setw(25) << "File Name"
+             << setw(35) << "Original Path"
+             << setw(22) << "Deleted Date"
+             << setw(25) << "Status" << "\n";
+
+        cout << string(113, '-') << "\n";
+
+        for (const auto &record : records) {
+            cout << left
+                 << setw(6) << record.id
+                 << setw(25) << record.fileName
+                 << setw(35) << record.filePath
+                 << setw(22) << record.deletedDate
+                 << setw(25) << record.status << "\n";
+        }
+    }
+
+    void searchHistory() {
+        if (records.empty()) {
+            cout << "\nNo recovery history available to search.\n";
+            return;
+        }
+
+        string keyword;
+
+        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+        cout << "\nEnter file name keyword: ";
+        getline(cin, keyword);
+
+        if (keyword.empty()) {
+            cout << "\nSearch keyword cannot be empty.\n";
+            return;
+        }
+
+        string lowerKeyword = toLowerCase(keyword);
+        bool found = false;
+
+        cout << "\n============= SEARCH RESULTS =============\n";
+
+        for (const auto &record : records) {
+            string lowerFileName = toLowerCase(record.fileName);
+
+            if (lowerFileName.find(lowerKeyword) != string::npos) {
+                cout << "\nID: " << record.id;
+                cout << "\nFile Name: " << record.fileName;
+                cout << "\nOriginal Path: " << record.filePath;
+                cout << "\nDeleted Date: " << record.deletedDate;
+                cout << "\nStatus: " << record.status << "\n";
+
+                found = true;
+            }
+        }
+
+        if (!found) {
+            cout << "\nNo matching file found in recovery history.\n";
+        }
+    }
+
+    void recoverFile() {
+        if (records.empty()) {
+            cout << "\nNo files available for recovery.\n";
+            return;
+        }
+
+        int id;
+
+        cout << "\nEnter Recovery ID to restore: ";
+        cin >> id;
+
+        for (auto &record : records) {
+            if (record.id == id) {
+                if (record.status == "Recovered") {
+                    cout << "\nThis file has already been marked as recovered.\n";
+                    return;
+                }
+
+                record.status = "Recovered";
+                saveHistory();
+
+                cout << "\nFile recovery completed successfully.\n";
+                cout << "Recovered file: " << record.fileName << "\n";
+                return;
+            }
+        }
+
+        cout << "\nRecovery ID not found.\n";
+    }
+
+    void deleteHistoryRecord() {
+        if (records.empty()) {
+            cout << "\nNo recovery records available.\n";
+            return;
+        }
+
+        int id;
+
+        cout << "\nEnter Recovery ID to permanently delete: ";
+        cin >> id;
+
+        for (auto it = records.begin(); it != records.end(); ++it) {
+            if (it->id == id) {
+                cout << "\nRecord found: " << it->fileName;
+                cout << "\nAre you sure you want to permanently delete this history record?";
+                cout << "\nEnter Y for Yes or N for No: ";
+
+                char choice;
+                cin >> choice;
+
+                if (choice == 'Y' || choice == 'y') {
+                    records.erase(it);
+                    saveHistory();
+
+                    cout << "\nRecovery history record permanently deleted.\n";
+                } else {
+                    cout << "\nDeletion cancelled.\n";
+                }
+
+                return;
+            }
+        }
+
+        cout << "\nRecovery ID not found.\n";
+    }
+
+    void showStatistics() {
+        int available = 0;
+        int recovered = 0;
+
+        for (const auto &record : records) {
+            if (record.status == "Recovered") {
+                recovered++;
+            } else {
+                available++;
+            }
+        }
+
+        cout << "\n============= RECOVERY STATISTICS =============\n";
+        cout << "Total Records: " << records.size() << "\n";
+        cout << "Available for Recovery: " << available << "\n";
+        cout << "Recovered Files: " << recovered << "\n";
+    }
+};
+
+void showMenu() {
+    cout << "\n==============================================";
+    cout << "\n      RECOVERY HISTORY MANAGEMENT SYSTEM";
+    cout << "\n==============================================";
+    cout << "\n1. Add Deleted File Record";
+    cout << "\n2. View Recovery History";
+    cout << "\n3. Search File History";
+    cout << "\n4. Recover File";
+    cout << "\n5. Permanently Delete History Record";
+    cout << "\n6. View Statistics";
+    cout << "\n7. Exit";
+    cout << "\n==============================================";
+    cout << "\nEnter your choice: ";
+}
+
+int main() {
+    RecoveryHistoryManager manager;
+    manager.loadHistory();
+
+    int choice;
+
+    do {
+        showMenu();
+        cin >> choice;
+
+        if (cin.fail()) {
+            cin.clear();
+            cin.ignore(numeric_limits<streamsize>::max(), '\n');
+
+            cout << "\nInvalid input. Please enter a number.\n";
+            continue;
+        }
+
+        switch (choice) {
+            case 1:
+                manager.addDeletedFile();
+                break;
+
+            case 2:
+                manager.viewHistory();
+                break;
+
+            case 3:
+                manager.searchHistory();
+                break;
+
+            case 4:
+                manager.recoverFile();
+                break;
+
+            case 5:
+                manager.deleteHistoryRecord();
+                break;
+
+            case 6:
+                manager.showStatistics();
+                break;
+
+            case 7:
+                cout << "\nThank you for using Recovery History Manager.\n";
+                break;
+
+            default:
+                cout << "\nInvalid choice. Please try again.\n";
+        }
+
+    } while (choice != 7);
+
+    return 0;
+}
